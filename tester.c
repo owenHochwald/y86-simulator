@@ -1,10 +1,11 @@
-#include <stdio.h>
 #include "tester.h"
+#include <stdint.h>
+#include <stdio.h>
 
 /*
  * How to approach this assignment.
  *
- * You need not maintain the O flag! As pointed out in class, there 
+ * You need not maintain the O flag! As pointed out in class, there
  * is no y86 instruction whose behaviour can change based on its
  * value.
  *
@@ -37,10 +38,10 @@
  *	Follow the structure described on the main page for this assignment.
  *	The tests we give you in main.c also follow this structure.  Test
  * 	each category before moving on to the next.  Think about error cases!
- *	Every time you think of a kind of error you need to check for, encapsulate
- *	that check in a small function that you can easily test; then use it
- *	every time you need to make that test.
- *	Be careful: on an error, you must not have changed any state.
+ *	Every time you think of a kind of error you need to check for,
+ *encapsulate that check in a small function that you can easily test; then use
+ *it every time you need to make that test. Be careful: on an error, you must
+ *not have changed any state.
  *
  *	A note from Margo: I have been programming a long time. I redid this
  *	entire assignment after having already done it once earlier in the
@@ -69,23 +70,65 @@
  *	- What do the conditional jump and conditional move instructions
  *	  have in common?
  *
- * 8. Finally, use the main program we give you to debug -- you can call functions
- *	from inside gdb and you will find this extraordinarily helpful, e.g.,
- *	call (void)dump_state(state)
+ * 8. Finally, use the main program we give you to debug -- you can call
+ *functions from inside gdb and you will find this extraordinarily helpful,
+ *e.g., call (void)dump_state(state)
  */
 
-/* 
+int is_memory_equal(y86_state_t *s1, y86_state_t *s2) {
+  if (s1->start_addr != s2->start_addr)
+    return 0;
+  if (s1->valid_mem != s2->valid_mem)
+    return 0;
+
+  // at this point we know s1->valid_mem == s2->valid_mem
+  for (int i = 0; i < s1->valid_mem; i++) {
+    // add the offset of the start
+    uint8_t s1_curr = s1->memory[i];
+    uint8_t s2_curr = s2->memory[i];
+
+    // compare
+    if (s1_curr != s2_curr) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+int is_registers_equal(y86_state_t *s1, y86_state_t *s2) {
+  int n_entries = sizeof(s1->registers) / sizeof(s1->registers[0]);
+  // -1 since we only have 15 valid registers for y86
+  for (int i = 0; i < n_entries - 1; i++) {
+    uint64_t reg1 = s1->registers[i];
+    uint64_t reg2 = s2->registers[i];
+
+    if (reg1 != reg2) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+/*
  * is_equal compares two y86 machine states for equivalence.
  * It returns 1 if s1 and s2 are equivalent.
  *
- * Unusual conditions: 
+ * Unusual conditions:
  * The memory states only need to match on valid bytes in memory.
  * The register states only need to match on valid y86 registers.
  * The flag bits only need to match on the specific flags supported
  * by the y86.
  */
-int is_equal(y86_state_t *s1, y86_state_t *s2){
-	return 0;
+int is_equal(y86_state_t *s1, y86_state_t *s2) {
+  if (!is_memory_equal(s1, s2) || !is_registers_equal(s1, s2)) {
+    return 0;
+  }
+
+  if (s1->pc != s2->pc || s1->flags != s2->flags) {
+    return 0;
+  }
+
+  return 1;
 }
 
 /*
@@ -94,16 +137,57 @@ int is_equal(y86_state_t *s1, y86_state_t *s2){
  * It returns 1 if a read is successful and 0 if it fails.
  */
 int read_quad(y86_state_t *state, uint64_t address, uint64_t *value) {
-	return 0;
+  uint64_t mem_limit;
+
+  mem_limit = state->start_addr + state->valid_mem;
+
+  // check if the address range [address, address+7] is valid
+  if (address < state->start_addr || address + 8 > mem_limit)
+    return 0;
+
+  // find the start offset
+  uint64_t offset = address - state->start_addr;
+
+  uint64_t result = 0;
+  for (int i = 0; i < 8; i++) {
+    uint64_t byte = state->memory[offset + i];
+    // shift the byte one full byte over
+    byte = byte << (i * 8);
+    // change the result bits at that spot
+    result |= byte;
+  }
+
+  *value = result;
+  return 1;
 }
 
-/* 
+/*
  * write_quad writes the 8-byte item 'value' to the machine state at memory
  * address 'address'.
  * It returns 1 if a write is successful and 0 if it fails.
  */
 int write_quad(y86_state_t *state, uint64_t address, uint64_t value) {
-	return 0;
+  uint64_t mem_limit;
+  uint8_t byte;
+  uint64_t offset;
+  const uint64_t BIT_MASK = 0x00000000000000ff;
+
+  mem_limit = state->start_addr + state->valid_mem;
+
+  // check if the address range [address, address+7] is valid
+  if (address < state->start_addr || address + 8 > mem_limit)
+    return 0;
+
+  offset = address - state->start_addr;
+
+  // write 8 bytes in little-endian format
+  for (int i = 0; i < 8; i++) {
+    byte = value & BIT_MASK;
+    state->memory[i + offset] = byte;
+    value >>= 8;
+  }
+
+  return 1;
 }
 
 /*
@@ -129,6 +213,6 @@ int write_quad(y86_state_t *state, uint64_t address, uint64_t value) {
  * 	reflect the last executed instruction
  */
 int y86_check(y86_state_t *state, y86_inst_t *instructions, int n_inst,
-    y86sim_func simfunc) {
-	return -1;
+              y86sim_func simfunc) {
+  return -1;
 }
