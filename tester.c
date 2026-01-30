@@ -126,6 +126,18 @@ int valid_register(uint64_t reg_num) { return reg_num < 16 && reg_num >= 0; }
  */
 void increment_pc(y86_state_t *state, uint64_t amount) { state->pc += amount; }
 
+/*
+ * Returns if a memory address is within the valid range, 8 byte addresses
+ */
+int valid_address(y86_state_t *state, uint64_t address) {
+  uint64_t mem_limit = state->start_addr + state->valid_mem;
+
+  // check if the address range [address, address+7] is valid
+  if (address < state->start_addr || address + 8 > mem_limit)
+    return 0;
+  return 1;
+}
+
 int handle_halt(y86_state_t *state) {
   // increment_pc(state, 2);
   return 1;
@@ -247,6 +259,55 @@ int handle_cmovxx(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
   return 0;
 }
 
+int handle_jump(y86_state_t *state, y86_inst_t instruction) {
+  state->pc = instruction.constval;
+  return 0;
+}
+
+/*
+ * Conditional jump checks the flags to determine whether to jump
+ */
+int handle_jxx(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
+  int should_jump = 0;
+
+  switch (op_code) {
+  case I_JEQ:
+    if (state->flags & FLAG_Z)
+      should_jump = 1;
+    break;
+  case I_JNE:
+    if (!(state->flags & FLAG_Z))
+      should_jump = 1;
+    break;
+  case I_JL:
+    if (state->flags & FLAG_S)
+      should_jump = 1;
+    break;
+  case I_JLE:
+    if ((state->flags & FLAG_Z) || (state->flags & FLAG_S))
+      should_jump = 1;
+    break;
+  case I_JG:
+    if (!(state->flags & FLAG_S) && !(state->flags & FLAG_Z))
+      should_jump = 1;
+    break;
+  case I_JGE:
+    if ((state->flags & FLAG_Z) || !(state->flags & FLAG_S))
+      should_jump = 1;
+    break;
+  default:
+    return 1;
+  }
+
+  if (should_jump) {
+    state->pc = instruction.constval;
+  } else {
+    increment_pc(state, 9);
+  }
+
+  return 0;
+}
+
 /*
  * Executes a single y86 instruction, modifying the state as needed.
  */
@@ -275,6 +336,15 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
   case I_CMOVLE:
   case I_CMOVNE:
     return handle_cmovxx(state, instruction, op_code);
+  case I_J:
+    return handle_jump(state, instruction);
+  case I_JEQ:
+  case I_JNE:
+  case I_JL:
+  case I_JLE:
+  case I_JG:
+  case I_JGE:
+    return handle_jxx(state, instruction, op_code);
   default:
     return 1;
   }
