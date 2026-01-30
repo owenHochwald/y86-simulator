@@ -179,15 +179,25 @@ int handle_halt(y86_state_t *state) {
   return 1;
 }
 
-void handle_irmovq(y86_state_t *state, y86_inst_t instruction) {
+int handle_irmovq(y86_state_t *state, y86_inst_t instruction) {
   // test if dest register is valid
-  if (!valid_register(instruction.rB)) {
-    return;
-  }
+  if (!valid_register(instruction.rB))
+    return 1;
 
   // write valC to R[rB]
   state->registers[instruction.rB] = instruction.constval;
   increment_pc(state, 10);
+  return 0;
+}
+
+int handle_rrmovq(y86_state_t *state, y86_inst_t instruction) {
+  if (!valid_register(instruction.rB) || !valid_register(instruction.rA))
+    return 1;
+
+  uint64_t val = state->registers[instruction.rA];
+  state->registers[instruction.rB] = val;
+  increment_pc(state, 2);
+  return 0;
 }
 
 /*
@@ -199,10 +209,10 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
   switch (op_code) {
   case I_HALT:
     return handle_halt(state);
-    break;
   case I_IRMOVQ:
-    handle_irmovq(state, instruction);
-    break;
+    return handle_irmovq(state, instruction);
+  case I_RRMOVQ:
+    return handle_rrmovq(state, instruction);
   default:
     return 1;
   }
