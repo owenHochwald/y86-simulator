@@ -298,6 +298,73 @@ int handle_rmmovq(y86_state_t *state, y86_inst_t instruction) {
   return 0;
 }
 
+int handle_pushq(y86_state_t *state, y86_inst_t instruction) {
+  if (!valid_register(instruction.rA))
+    return 1;
+
+  const int RSP = 4;
+
+  state->registers[RSP] -= 8;
+
+  uint64_t valA = state->registers[instruction.rA];
+  if (!write_quad(state, state->registers[RSP], valA)) {
+    state->registers[RSP] += 8;
+    return 1;
+  }
+
+  increment_pc(state, 2);
+  return 0;
+}
+
+int handle_popq(y86_state_t *state, y86_inst_t instruction) {
+  if (!valid_register(instruction.rA))
+    return 1;
+
+  const int RSP = 4;
+
+  uint64_t valM;
+  if (!read_quad(state, state->registers[RSP], &valM))
+    return 1;
+
+  state->registers[instruction.rA] = valM;
+
+  state->registers[RSP] += 8;
+
+  increment_pc(state, 2);
+  return 0;
+}
+
+int handle_call(y86_state_t *state, y86_inst_t instruction) {
+  const int RSP = 4;
+
+  uint64_t return_addr = state->pc + 9;
+
+  state->registers[RSP] -= 8;
+
+  if (!write_quad(state, state->registers[RSP], return_addr)) {
+    state->registers[RSP] += 8;
+    return 1;
+  }
+
+  state->pc = instruction.constval;
+
+  return 0;
+}
+
+int handle_ret(y86_state_t *state) {
+  const int RSP = 4;
+
+  uint64_t return_addr;
+  if (!read_quad(state, state->registers[RSP], &return_addr))
+    return 1;
+
+  state->registers[RSP] += 8;
+
+  state->pc = return_addr;
+
+  return 0;
+}
+
 /*
  * Conditional jump checks the flags to determine whether to jump
  */
@@ -383,9 +450,16 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
     return handle_jxx(state, instruction, op_code);
   case I_MRMOVQ:
     return handle_mrmovq(state, instruction);
-
   case I_RMMOVQ:
     return handle_rmmovq(state, instruction);
+  case I_PUSHQ:
+    return handle_pushq(state, instruction);
+  case I_POPQ:
+    return handle_popq(state, instruction);
+  case I_CALL:
+    return handle_call(state, instruction);
+  case I_RET:
+    return handle_ret(state);
   default:
     return 1;
   }
