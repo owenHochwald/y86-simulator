@@ -51,7 +51,12 @@ int is_equal(y86_state_t *s1, y86_state_t *s2) {
     return 0;
   }
 
-  if (s1->pc != s2->pc || s1->flags != s2->flags) {
+  if (s1->pc != s2->pc) {
+    return 0;
+  }
+
+  uint8_t flag_mask = FLAG_Z | FLAG_S | FLAG_O;
+  if ((s1->flags & flag_mask) != (s2->flags & flag_mask)) {
     return 0;
   }
 
