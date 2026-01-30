@@ -264,6 +264,40 @@ int handle_jump(y86_state_t *state, y86_inst_t instruction) {
   return 0;
 }
 
+int handle_nop(y86_state_t *state) {
+  increment_pc(state, 1);
+  return 0;
+}
+
+int handle_mrmovq(y86_state_t *state, y86_inst_t instruction) {
+  if (!valid_register(instruction.rB) || !valid_register(instruction.rA))
+    return 1;
+
+  uint64_t valE = state->registers[instruction.rB] + instruction.constval;
+  uint64_t valM;
+  if (!read_quad(state, valE, &valM))
+    return 1;
+
+  state->registers[instruction.rA] = valM;
+
+  increment_pc(state, 10);
+  return 0;
+}
+
+int handle_rmmovq(y86_state_t *state, y86_inst_t instruction) {
+  if (!valid_register(instruction.rB) || !valid_register(instruction.rA))
+    return 1;
+
+  uint64_t valA = state->registers[instruction.rA];
+  uint64_t valE = state->registers[instruction.rB] + instruction.constval;
+
+  if (!write_quad(state, valE, valA))
+    return 1;
+
+  increment_pc(state, 10);
+  return 0;
+}
+
 /*
  * Conditional jump checks the flags to determine whether to jump
  */
@@ -317,6 +351,8 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
   switch (op_code) {
   case I_HALT:
     return handle_halt(state);
+  case I_NOP:
+    return handle_nop(state);
   case I_IRMOVQ:
     return handle_irmovq(state, instruction);
   case I_RRMOVQ:
@@ -345,6 +381,11 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
   case I_JG:
   case I_JGE:
     return handle_jxx(state, instruction, op_code);
+  case I_MRMOVQ:
+    return handle_mrmovq(state, instruction);
+
+  case I_RMMOVQ:
+    return handle_rmmovq(state, instruction);
   default:
     return 1;
   }
@@ -360,10 +401,6 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
  * executes the n_inst instructions sequentially. That is, instructions
  * such as call, ret, or jXX do not change which instruction is to be
  * executed next.
- *
- * Hint: To validate that 'simfunc' executed properly, you will need
- * to produce the correct end state. That means that you must write
- * your own simulator to produce that correct end state.
  *
  * Unusual conditions:
  * On halt: stop execution, the state should reflect the last executed
