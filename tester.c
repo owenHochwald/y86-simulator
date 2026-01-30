@@ -200,6 +200,54 @@ int handle_rrmovq(y86_state_t *state, y86_inst_t instruction) {
   return 0;
 }
 
+int handle_opq(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
+  if (!valid_register(instruction.rB) || !valid_register(instruction.rA))
+    return 1;
+
+  int64_t val;
+  uint64_t valA = state->registers[instruction.rA];
+  uint64_t valB = state->registers[instruction.rB];
+
+  switch (op_code) {
+  case I_ADDQ:
+    val = valB + valA;
+    break;
+  case I_SUBQ:
+    val = valB - valA;
+    break;
+  case I_MODQ:
+    val = valB % valA;
+    break;
+  case I_MULQ:
+    val = valB * valA;
+    break;
+  case I_DIVQ:
+    val = valB / valA;
+    break;
+  case I_ANDQ:
+    val = valB & valA;
+    break;
+  case I_XORQ:
+    val = valB ^ valA;
+    break;
+  default:
+    return 1;
+  }
+
+  state->flags = 0;
+
+  // make sure to set condition flags
+  if (val == 0)
+    state->flags |= FLAG_Z;
+
+  if (val < 0)
+    state->flags |= FLAG_S;
+
+  state->registers[instruction.rB] = val;
+  increment_pc(state, 2);
+  return 0;
+}
+
 /*
  * Executes a single y86 instruction, modifying the state as needed.
  */
@@ -213,6 +261,14 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
     return handle_irmovq(state, instruction);
   case I_RRMOVQ:
     return handle_rrmovq(state, instruction);
+  case I_ADDQ:
+  case I_SUBQ:
+  case I_MODQ:
+  case I_MULQ:
+  case I_DIVQ:
+  case I_ANDQ:
+  case I_XORQ:
+    return handle_opq(state, instruction, op_code);
   default:
     return 1;
   }
