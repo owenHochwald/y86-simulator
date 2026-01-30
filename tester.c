@@ -207,9 +207,8 @@ int handle_opq(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
     return 1;
   }
 
-  state->flags = 0;
+  state->flags &= ~(FLAG_Z | FLAG_S);
 
-  // make sure to set condition flags
   if (val == 0)
     state->flags |= FLAG_Z;
 
@@ -284,7 +283,8 @@ int handle_mrmovq(y86_state_t *state, y86_inst_t instruction) {
     return 1;
 
   int64_t displacement = (int64_t)instruction.constval;
-  uint64_t valE = state->registers[instruction.rB] + displacement;
+  uint64_t valE =
+      (uint64_t)((int64_t)state->registers[instruction.rB] + displacement);
   uint64_t valM;
   if (!read_quad(state, valE, &valM))
     return 1;
@@ -301,7 +301,8 @@ int handle_rmmovq(y86_state_t *state, y86_inst_t instruction) {
 
   uint64_t valA = state->registers[instruction.rA];
   int64_t displacement = (int64_t)instruction.constval;
-  uint64_t valE = state->registers[instruction.rB] + displacement;
+  uint64_t valE =
+      (uint64_t)((int64_t)state->registers[instruction.rB] + displacement);
 
   if (!write_quad(state, valE, valA))
     return 1;
