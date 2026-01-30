@@ -119,7 +119,9 @@ int write_quad(y86_state_t *state, uint64_t address, uint64_t value) {
 
 // ----------- INSTRUCTION HANDLING ---------------
 
-int valid_register(uint64_t reg_num) { return reg_num < 16 && reg_num >= 0; }
+// Register 0xF means "no register" - it's valid in the instruction encoding
+// but shouldn't be read from or written to
+int valid_register(uint64_t reg_num) { return reg_num < 15; }
 
 /*
  * Increments the state->pc by `amount` bytes
@@ -168,9 +170,10 @@ int handle_opq(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
   if (!valid_register(instruction.rB) || !valid_register(instruction.rA))
     return 1;
 
+  // Treat register values as signed for arithmetic operations
+  int64_t valA = (int64_t)state->registers[instruction.rA];
+  int64_t valB = (int64_t)state->registers[instruction.rB];
   int64_t val;
-  uint64_t valA = state->registers[instruction.rA];
-  uint64_t valB = state->registers[instruction.rB];
 
   switch (op_code) {
   case I_ADDQ:
@@ -180,12 +183,18 @@ int handle_opq(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
     val = valB - valA;
     break;
   case I_MODQ:
+    // Check for divide by zero
+    if (valA == 0)
+      return 1;
     val = valB % valA;
     break;
   case I_MULQ:
     val = valB * valA;
     break;
   case I_DIVQ:
+    // Check for divide by zero
+    if (valA == 0)
+      return 1;
     val = valB / valA;
     break;
   case I_ANDQ:
@@ -207,7 +216,7 @@ int handle_opq(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
   if (val < 0)
     state->flags |= FLAG_S;
 
-  state->registers[instruction.rB] = val;
+  state->registers[instruction.rB] = (uint64_t)val;
   increment_pc(state, 2);
   return 0;
 }
@@ -260,6 +269,7 @@ int handle_cmovxx(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
 }
 
 int handle_jump(y86_state_t *state, y86_inst_t instruction) {
+  // Unconditional jump: set PC to destination
   state->pc = instruction.constval;
   return 0;
 }
@@ -273,7 +283,8 @@ int handle_mrmovq(y86_state_t *state, y86_inst_t instruction) {
   if (!valid_register(instruction.rB) || !valid_register(instruction.rA))
     return 1;
 
-  uint64_t valE = state->registers[instruction.rB] + instruction.constval;
+  int64_t displacement = (int64_t)instruction.constval;
+  uint64_t valE = state->registers[instruction.rB] + displacement;
   uint64_t valM;
   if (!read_quad(state, valE, &valM))
     return 1;
@@ -289,7 +300,8 @@ int handle_rmmovq(y86_state_t *state, y86_inst_t instruction) {
     return 1;
 
   uint64_t valA = state->registers[instruction.rA];
-  uint64_t valE = state->registers[instruction.rB] + instruction.constval;
+  int64_t displacement = (int64_t)instruction.constval;
+  uint64_t valE = state->registers[instruction.rB] + displacement;
 
   if (!write_quad(state, valE, valA))
     return 1;
@@ -304,13 +316,14 @@ int handle_pushq(y86_state_t *state, y86_inst_t instruction) {
 
   const int RSP = 4;
 
-  state->registers[RSP] -= 8;
-
   uint64_t valA = state->registers[instruction.rA];
-  if (!write_quad(state, state->registers[RSP], valA)) {
-    state->registers[RSP] += 8;
+
+  uint64_t new_rsp = state->registers[RSP] - 8;
+  if (!write_quad(state, new_rsp, valA)) {
     return 1;
   }
+
+  state->registers[RSP] = new_rsp;
 
   increment_pc(state, 2);
   return 0;
