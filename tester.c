@@ -1,54 +1,6 @@
 #include "tester.h"
 #include <stdint.h>
 #include <stdio.h>
-/*
- * How to approach this assignment.
- *
- * You need not maintain the O flag! As pointed out in class, there
- * is no y86 instruction whose behaviour can change based on its
- * value.
- *
- *
- * 6. Now, start adding instructions incrementally.
- *	Follow the structure described on the main page for this assignment.
- *	The tests we give you in main.c also follow this structure.  Test
- * 	each category before moving on to the next.  Think about error cases!
- *	Every time you think of a kind of error you need to check for,
- *encapsulate that check in a small function that you can easily test; then use
- *it every time you need to make that test. Be careful: on an error, you must
- *not have changed any state.
- *
- *	A note from Margo: I have been programming a long time. I redid this
- *	entire assignment after having already done it once earlier in the
- *	week; I had at least one bug to fix after every new thing I added.
- *	However, by testing each function and each instruction or each
- *	instruction class, the bugs were relatively easy to fix. Had I
- *	tried to do everything at the end, it would have taken two to
- *	three times longer (at least). I also used the main.c we give you
- *	to test entire sets before ever running the autograder.
- *	I also found that by building up lots of error functions, by the
- *	time I got to the last several classes, it was easy to assemble
- *	implementations for them.
- *
- *	While we provided a bunch of test cases, you are free to implement
- *	your own -- just copy a test case and edit it to do what you want!
- *	When you do run the autograder, if you fail a test, you will get
- *	output describing the test case. You can cut and paste the instructions
- *	and state directly into appropriate files in a new test case directory.
- *
- *	If you want to create your own tests, read the file tester.md.
- *
- * 7. When possible, identify helper functions you can write, e.g.,
- *	- Is there error checking that might be used by many instructions?
- *	- Can you think of functionality that might be shared across all
- *	  ALU ops?
- *	- What do the conditional jump and conditional move instructions
- *	  have in common?
- *
- * 8. Finally, use the main program we give you to debug -- you can call
- *functions from inside gdb and you will find this extraordinarily helpful,
- *e.g., call (void)dump_state(state)
- */
 
 int is_memory_equal(y86_state_t *s1, y86_state_t *s2) {
   if (s1->start_addr != s2->start_addr)
@@ -249,6 +201,53 @@ int handle_opq(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
 }
 
 /*
+ * Conditional move looks to the flags to determine which path to take
+ */
+int handle_cmovxx(y86_state_t *state, y86_inst_t instruction, inst_t op_code) {
+  if (!valid_register(instruction.rB) || !valid_register(instruction.rA))
+    return 1;
+
+  int64_t val = -1;
+  uint64_t valA = state->registers[instruction.rA];
+
+  switch (op_code) {
+  case I_CMOVEQ:
+    if (state->flags & FLAG_Z)
+      val = valA;
+    break;
+  case I_CMOVG:
+    if (!(state->flags & FLAG_S) && !(state->flags & FLAG_Z))
+      val = valA;
+    break;
+  case I_CMOVGE:
+    if ((state->flags & FLAG_Z) || !(state->flags & FLAG_S))
+      val = valA;
+    break;
+  case I_CMOVL:
+    if ((state->flags & FLAG_S))
+      val = valA;
+    break;
+  case I_CMOVLE:
+    if ((state->flags & FLAG_Z) || (state->flags & FLAG_S))
+      val = valA;
+    break;
+  case I_CMOVNE:
+    if (!(state->flags & FLAG_Z))
+      val = valA;
+    break;
+  default:
+    return 1;
+  }
+
+  if (val != -1) {
+    state->registers[instruction.rB] = val;
+  }
+
+  increment_pc(state, 2);
+  return 0;
+}
+
+/*
  * Executes a single y86 instruction, modifying the state as needed.
  */
 int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
@@ -269,6 +268,13 @@ int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
   case I_ANDQ:
   case I_XORQ:
     return handle_opq(state, instruction, op_code);
+  case I_CMOVEQ:
+  case I_CMOVG:
+  case I_CMOVGE:
+  case I_CMOVL:
+  case I_CMOVLE:
+  case I_CMOVNE:
+    return handle_cmovxx(state, instruction, op_code);
   default:
     return 1;
   }
