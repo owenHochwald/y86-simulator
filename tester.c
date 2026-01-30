@@ -1,7 +1,6 @@
 #include "tester.h"
 #include <stdint.h>
 #include <stdio.h>
-
 /*
  * How to approach this assignment.
  *
@@ -9,30 +8,6 @@
  * is no y86 instruction whose behaviour can change based on its
  * value.
  *
- * 1. First, write each of the helper functions. Write them one
- *      at a time and test them with the corresponding test cases.
- *      You can test them using the main program we give you; this
- *      will be much easier to debug.
- *
- * 2. Design an API that can call to execute a single instruction
- *	from the array of instructions you need to process.  Figure
- *	out what parameters that function should take. Write the
- *	function and have it do nothing; add the right call to it
- *	in your main function. You are now ready to start building
- *	both your simulator and checker.
- *
- * 3. Write the y86_check function. Use the answer to question  Lab3-Ind.8
- *	to help you do this.
- *
- * 4. Start building out your simulator (the function you designed in #2).
- *	Start by just having it return success.
- *	You should find that even this simple simulator passes the first test.
- *	(Once again, use the main program we give you.)
- *
- * 5. Now, start building it out for real!
- * 	Write code to transform the string representation of an instruction
- *	to an enum (hint: look at the utility functions we provide for you;
- *	they are documented in tester.h).
  *
  * 6. Now, start adding instructions incrementally.
  *	Follow the structure described on the main page for this assignment.
@@ -190,6 +165,51 @@ int write_quad(y86_state_t *state, uint64_t address, uint64_t value) {
   return 1;
 }
 
+// ----------- INSTRUCTION HANDLING ---------------
+
+int valid_register(uint64_t reg_num) { return reg_num < 16 && reg_num >= 0; }
+
+/*
+ * Increments the state->pc by `amount` bytes
+ */
+void increment_pc(y86_state_t *state, uint64_t amount) { state->pc += amount; }
+
+int handle_halt(y86_state_t *state) {
+  // increment_pc(state, 2);
+  return 1;
+}
+
+void handle_irmovq(y86_state_t *state, y86_inst_t instruction) {
+  // test if dest register is valid
+  if (!valid_register(instruction.rB)) {
+    return;
+  }
+
+  // write valC to R[rB]
+  state->registers[instruction.rB] = instruction.constval;
+  increment_pc(state, 10);
+}
+
+/*
+ * Executes a single y86 instruction, modifying the state as needed.
+ */
+int execute_single_instruction(y86_state_t *state, y86_inst_t instruction) {
+  inst_t op_code = inst_to_enum(instruction.instruction);
+
+  switch (op_code) {
+  case I_HALT:
+    return handle_halt(state);
+    break;
+  case I_IRMOVQ:
+    handle_irmovq(state, instruction);
+    break;
+  default:
+    return 1;
+  }
+
+  return 0;
+}
+
 /*
  * y86_check returns 0 if the y86sim_func properly simulates
  * the n_inst instructions described in the instructions array, and
@@ -214,5 +234,25 @@ int write_quad(y86_state_t *state, uint64_t address, uint64_t value) {
  */
 int y86_check(y86_state_t *state, y86_inst_t *instructions, int n_inst,
               y86sim_func simfunc) {
-  return -1;
+
+  y86_state_t actual_state = *state;
+  y86_state_t expected_state = *state;
+
+  simfunc(&actual_state, instructions, n_inst);
+
+  for (int i = 0; i < n_inst; i++) {
+    int stop = execute_single_instruction(&expected_state, instructions[i]);
+
+    // check for a stoping condition
+    if (stop)
+      break;
+  }
+
+  // printf("Here is the actual state: \n\n\n");
+  // dump_state(&actual_state);
+
+  // printf("Here is the expected state: \n\n\n");
+  // dump_state(&expected_state);
+
+  return !is_equal(&actual_state, &expected_state);
 }
